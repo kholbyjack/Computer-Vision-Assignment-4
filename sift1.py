@@ -88,87 +88,24 @@ def scale_space_extrema(image):
 
     # save and return image
     cv.imwrite("Output_Data/Scale.png", output_image)
-    return output_image, extrema, octaves
+    return output_image
             
 
 # ----- Localize Key Points -----
 # this will refine the key points 
-# go through selected extrema and if they meet the criteria, they are stored in new extrema list
+# initial extraction:
 '''
 Get rid of:
-- poor contrast key points (if abs pixel is less than a threshold value, ignore)
+- poor contrast key points
 - poorly localized along an edge
 - use taylor series expansion of DoG
 '''
-# initial extraction:
-def initial_extraction(image, extrema, dog, threshold=20):
-    new_extrema = []
-    for (x, y) in extrema:
-        if abs(image[y, x]) > threshold:
-            new_extrema.append((x, y))  #only adding high contrast pixels
-
-        # add this if you have time!!!!!
-        # max = -
-        # d = dog + fod*max + 1/2*max*sod
-        # if abs(d) > threshold, add it 
-
-    return new_extrema
 
 # further extraction:
-def further_extraction(extrema, dog, threshold=10):
-    # compute hessian matrix
-    # need thres and det to find r of point
-    # eliminate point if r > threshold
-    # for calulation of r, only Dxx, Dyy, and Dxy parts of the Hessian matrix are needed
-    # for each of these values, approximate the second derivative
-    new_extrema = []
-    for (x, y) in extrema:
-        poi = dog[y, x]
-        Dxx = dog[y, x + 1] + dog[y, x - 1] - 2*poi
-        Dyy = dog[y + 1, x] + dog[y - 1, x] - 2*poi
-        Dxy = (dog[y + 1, x + 1] - dog[y - 1, x + 1] - dog[y + 1, x - 1] + dog[y - 1, x - 1])/4
-
-        thres = Dxx + Dyy
-        det = Dxx*Dyy - Dxy**2
-
-        if det >= 0 and (thres**2/det < threshold):
-            new_extrema.append((x, y))
-
-    return new_extrema
-
-'''
-Get rid of:
-- those that do not meet hessian matrix standard (set r to 1 like in slides)
-- 
-'''
-# MAYBE DO THIS FOR EVERY DOG image???
-def key_point_localization(image, extrema, octaves):
-    new_extrema = []
-    dog = octaves[1][1] #get a DoG image from the second octave
-
-    # initial extraction
-    ie_extrema = initial_extraction(image, extrema, dog)
-    ie_img = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
-    for (x, y) in ie_extrema:
-        cv.circle(ie_img, (x, y), 2, (255, 255, 0), -1)
-    cv.imwrite("Output_Data/IEKPLoc.png", ie_img)
-    
-
-    # further extraction
-    new_extrema = further_extraction(ie_extrema, dog)
-
-    # drawing the keypoints on the image
-    output_image = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
-    for (x, y) in new_extrema:
-        cv.circle(output_image, (x, y), 2, (255, 255, 0), -1)
-
-    cv.imwrite("Output_Data/KPLoc.png", output_image)
-    return output_image
 
 
 # ----- Orientation Assignment -----
 # assign orientation to points
-# weighted direction histogram
 
 # ----- Key Point Descriptor -----
 # describe key points
@@ -183,14 +120,11 @@ def main():
 
 
     # Step 1: Scale Space Extrema Detection
-    scale_space_img, initial_extrema, octaves = scale_space_extrema(blocks_gray)
+    scale_space_img = scale_space_extrema(blocks_gray)
     cv.namedWindow('Scale Space Image', cv.WINDOW_AUTOSIZE)
     cv.imshow('Scale Space Image', scale_space_img)
 
     #Step 2: 
-    key_img = key_point_localization(blocks_gray, initial_extrema, octaves)
-    cv.namedWindow('KP Localization Image', cv.WINDOW_AUTOSIZE)
-    cv.imshow('KP Localization Image', key_img)
 
     #Step 3:
 
