@@ -3,6 +3,7 @@ import math
 import numpy as np
 
 
+# ----- Scale Space Extrema Detection -----
 # pinpoint locations for finding features
 '''
 https://docs.opencv.org/4.x/da/df5/tutorial_py_sift_intro.html
@@ -18,6 +19,7 @@ def scale_space_octave(image, scale):
     octave = [image]
 
     for i in range(scale):
+        # may need to divide diff in line 26 by k*sigma - sigma????????
         gaus_one = cv.GaussianBlur(image, (5, 5), sigmaX=sigma)
         sigma = k*sigma
         gaus_two = cv.GaussianBlur(image, (5, 5), sigmaX=sigma)
@@ -44,53 +46,81 @@ def find_extrema(octave, scale):
     for y in range(1, height - 1):
         for x in range(1, width - 1):
             # get 3x3 arrays
+            poi = current_img[y, x]
             array = current_img[y - 1:y + 2, x - 1: x + 2]
             lower_array = lower_img[y - 1:y + 2, x - 1: x + 2]
             higher_array = higher_img[y - 1:y + 2, x - 1: x + 2]
-            poi = array[y, x]
-
-            # got through points in all arrays
-            if (poi > array.max() and poi > lower_array.max() and poi > higher_array.max()) or (poi < array.min() and poi < lower_array.min() and poi < higher_array.min()):
-                extrema.append(poi)
+            
+            # if poi is either greater than or less than all points, add to extrema array
+            if (poi >= array.max() and poi > lower_array.max() and poi > higher_array.max()) or (poi <= array.min() and poi < lower_array.min() and poi < higher_array.min()):
+                extrema.append((x, y))
     
-    # return extrema
+    # return extrema array
     return extrema
 
 
-def scale_space(image):
+def scale_space_extrema(image):
     octaves = []
-    extrema = []    #will be an array of five arrays for each octave
-    scale_img = image
+    extrema_temp = []    #will be an array of five arrays for each octave
+
     # computing octaves (only 5 levels)
     for i in range(5):
-        octave = scale_space_octave(scale_img, i)
+        octave = scale_space_octave(image, i)
         octaves.append(octave)
 
-    # finding extrema in octaves
+    # finding extrema (the key points) in octaves
     # scales are the size of the octave
     for octave in octaves:
         for scale in range(1, len(octave) - 2):
             extrem = find_extrema(octave, scale)
-            extrema.append(extrem)
+            extrema_temp.append(extrem)
+
+    # flattening the 2D extrema list
+    extrema = []
+    for sublist in extrema_temp:
+        for item in sublist:
+            extrema.append(item)
+
+    # drawing the keypoints on the image
+    output_image = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
+    for (x, y) in extrema:
+        cv.circle(output_image, (x, y), 2, (255, 255, 0), -1)
+
+    # save and return image
+    cv.imwrite("Output_Data/Scale.png", output_image)
+    return output_image
             
 
-# localize/normaize key points
+# ----- Localize Key Points -----
+# this will refine the key points 
+# initial extraction:
+'''
+Get rid of:
+- poor contrast key points
+- poorly localized along an edge
+- use taylor series expansion of DoG
+'''
 
+# further extraction:
+
+
+# ----- Orientation Assignment -----
 # assign orientation to points
 
+# ----- Key Point Descriptor -----
 # describe key points
 
 def main():
     # read image and preprocessing
-    blocks_img = cv.imread('Input Data/blocks_L-150x150.png')
+    blocks_img = cv.imread('Input_Data/blocks_L-150x150.png')
     blocks_gray = cv.cvtColor(blocks_img, cv.COLOR_BGR2GRAY)
 
-    cv.namedWindow('Gray Image', cv.WINDOW_AUTOSIZE)
-    cv.imshow('Gray Image', blocks_gray)
+    # cv.namedWindow('Gray Image', cv.WINDOW_AUTOSIZE)
+    # cv.imshow('Gray Image', blocks_gray)
 
 
     # Step 1: Scale Space Extrema Detection
-    scale_space_img = scale_space(blocks_gray, 1)
+    scale_space_img = scale_space_extrema(blocks_gray)
     cv.namedWindow('Scale Space Image', cv.WINDOW_AUTOSIZE)
     cv.imshow('Scale Space Image', scale_space_img)
 
@@ -108,5 +138,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
