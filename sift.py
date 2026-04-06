@@ -186,12 +186,11 @@ def orientation_assignment_keypoints(image, keypoints):
                     continue
 
                 i = int(ori//10)
-                # print(i)
+            
 
                 # add to the total magnitude of the array at the right orientation
                 hist_array[i] += mag
 
-        print(hist_array)
         dominant_ori = np.argmax(hist_array)
         dominant_angle = dominant_ori*10
         dominant_mag = max(hist_array)
@@ -207,7 +206,6 @@ def orientation_assignment(image, keypoints):
     new_image = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
     image1 = new_image.astype(np.float32)
     for (x, y, orientation, magnitude) in ori_key:
-        # print(orientation)
         x2 = int(x + 10*np.cos(orientation))
         y2 = int(y + 10*np.sin(orientation))
         cv.arrowedLine(new_image, (x, y), (x2, y2), (0, 0, 255))
@@ -235,7 +233,7 @@ def kp_descriptors(keypoints, magnitude, orientation):
             for k in range(-7, 8):
                  
                 # making 4 area 
-                hist = np.zeros(4)  #store computed descriptors
+                hist = np.zeros(8)  #store computed descriptors
 
                 for b in range(x -1, x + 2):
                     for c in range(x -1,x + 2):
@@ -250,7 +248,7 @@ def kp_descriptors(keypoints, magnitude, orientation):
 
                         # changing the orientation, which rotates the angle
                         rotate_ori = sample_ori - ori
-                        i = int(rotate_ori//90)
+                        i = int(rotate_ori//45)
                         hist[i] += sample_mag
 
             descriptor.append(hist)
