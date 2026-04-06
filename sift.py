@@ -5,12 +5,7 @@ import numpy as np
 
 # ----- Scale Space Extrema Detection -----
 # pinpoint locations for finding features
-'''
-https://docs.opencv.org/4.x/da/df5/tutorial_py_sift_intro.html
-Steps:
-    - find the difference of gaussian
-    - local extrema are potential key points
-'''
+
 def scale_space_octave(image, scale):
     # convolve image with gaussian 
     sigma = 1.6
@@ -94,23 +89,13 @@ def scale_space_extrema(image):
 # ----- Localize Key Points -----
 # this will refine the key points 
 # go through selected extrema and if they meet the criteria, they are stored in new extrema list
-'''
-Get rid of:
-- poor contrast key points (if abs pixel is less than a threshold value, ignore)
-- poorly localized along an edge
-- use taylor series expansion of DoG
-'''
+
 # initial extraction:
 def initial_extraction(image, extrema, dog, threshold=20):
     new_extrema = []
     for (x, y) in extrema:
         if abs(image[y, x]) > threshold:
             new_extrema.append((x, y))  #only adding high contrast pixels
-
-        # add this if you have time!!!!!
-        # max = -
-        # d = dog + fod*max + 1/2*max*sod
-        # if abs(d) > threshold, add it 
 
     return new_extrema
 
@@ -136,12 +121,7 @@ def further_extraction(extrema, dog, threshold=10):
 
     return new_extrema
 
-'''
-Get rid of:
-- those that do not meet hessian matrix standard (set r to 1 like in slides)
-- 
-'''
-# MAYBE DO THIS FOR EVERY DOG image???
+
 def key_point_localization(image, extrema, octaves):
     new_extrema = []
     dog = octaves[1][1] #get a DoG image from the second octave
@@ -163,23 +143,132 @@ def key_point_localization(image, extrema, octaves):
         cv.circle(output_image, (x, y), 2, (255, 255, 0), -1)
 
     cv.imwrite("Output_Data/KPLoc.png", output_image)
-    return output_image
+    return output_image, new_extrema
 
 
 # ----- Orientation Assignment -----
 # assign orientation to points
 # weighted direction histogram
+def find_orientation_magnitude(image):
+    image1 = image.astype(np.float32)
+
+    # the central derivatives for horizontal (dx) and vertical change(dy); done with the sobel operator
+    dx= cv.Sobel(image1, cv.CV_32F, dx=1, dy=0, ksize=3)
+    dy = cv.Sobel(image1, cv.CV_32F, dx=0, dy=1, ksize=3)
+
+    # magnitude and orientation
+    mag = np.sqrt(dx**2 - dy**2)
+    ori = np.degrees(np.arctan(dy, dx)) % 360   #default radian, convert to degrees
+
+    return mag, ori
+
+# MAIN
+def orientation_assignment_keypoints(image, keypoints):
+    # Using 8x8 area for orientation assignment
+    # keep in range of a circle surrounding the 8x8 area
+    hist_array = np.zeros(36)   #array serves as a 36 bin histogram, with each bin being 10 degrees (index is degrees)
+    new_keypoints = []
+    magnitude, orientation = find_orientation_magnitude(image)
+    mag_height, mag_width = magnitude.shape
+
+    for (x, y) in keypoints:
+        # go through a 8x8 area around the keypoint
+        for h in range(x - 3, x + 4):
+            for k in range(y - 3, y + 4):
+                # only calculate for items in the 8x8 area
+                if h < 0 or k < 0 or h >= mag_width or k >= mag_height:
+                    continue
+
+                # magnitude and orientation for the region
+                mag = magnitude[k, h]
+                ori = orientation[k, h] 
+                if math.isnan(mag) or math.isnan(ori):
+                    continue
+
+                i = int(ori//10)
+                # print(i)
+
+                # add to the total magnitude of the array at the right orientation
+                hist_array[i] += mag
+
+        print(hist_array)
+        dominant_ori = np.argmax(hist_array)
+        dominant_angle = dominant_ori*10
+        dominant_mag = max(hist_array)
+
+        new_keypoints.append((x, y, dominant_angle, dominant_mag))  #only append the key point with the dominant magnitude in the region
+
+    return new_keypoints
+
+
+def orientation_assignment(image, keypoints):
+    ori_key = orientation_assignment_keypoints(image, keypoints)
+
+    new_image = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
+    image1 = new_image.astype(np.float32)
+    for (x, y, orientation, magnitude) in ori_key:
+        # print(orientation)
+        x2 = int(x + 10*np.cos(orientation))
+        y2 = int(y + 10*np.sin(orientation))
+        cv.arrowedLine(new_image, (x, y), (x2, y2), (0, 0, 255))
+
+    cv.imwrite("Output_Data/OrAs.png", new_image)
+
+    return new_image, ori_key
+
 
 # ----- Key Point Descriptor -----
 # describe key points
+# using 16x16 area for descriptor
+def kp_descriptors(keypoints, magnitude, orientation):
+    descriptors = []
+    
+    for (x, y, ori, mag) in keypoints:
+        descriptor = [] #find one descriptor per point
+        # desc = sum of neighboring mags
+        # ori = orientation[y, x]
+        # mag = magnitude[y, x]
+        mag_height, mag_width = magnitude.shape
+
+        # 16x16 area, divided into 4x4 areas
+        for h in range(-7, 8):
+            for k in range(-7, 8):
+                 
+                # making 4 area 
+                hist = np.zeros(4)  #store computed descriptors
+
+                for b in range(x -1, x + 2):
+                    for c in range(x -1,x + 2):
+                        if b < 0 or c < 0 or b >= mag_width or c >= mag_height:
+                            continue
+
+                        sample_ori = orientation[c, b]
+                        sample_mag = magnitude[c, b]
+
+                        if math.isnan(mag) or math.isnan(ori):
+                            continue
+
+                        # changing the orientation, which rotates the angle
+                        rotate_ori = sample_ori - ori
+                        i = int(rotate_ori//90)
+                        hist[i] += sample_mag
+
+            descriptor.append(hist)
+
+    # flattening descriptor list
+    descriptors = []
+    for sublist in descriptor:
+        for item in sublist:
+            descriptors.append(item)
+
+    return descriptors
+                
+            
 
 def main():
     # read image and preprocessing
     blocks_img = cv.imread('Input_Data/blocks_L-150x150.png')
     blocks_gray = cv.cvtColor(blocks_img, cv.COLOR_BGR2GRAY)
-
-    # cv.namedWindow('Gray Image', cv.WINDOW_AUTOSIZE)
-    # cv.imshow('Gray Image', blocks_gray)
 
 
     # Step 1: Scale Space Extrema Detection
@@ -188,18 +277,24 @@ def main():
     cv.imshow('Scale Space Image', scale_space_img)
 
     #Step 2: 
-    key_img = key_point_localization(blocks_gray, initial_extrema, octaves)
+    key_img, new_extrema = key_point_localization(blocks_gray, initial_extrema, octaves)
     cv.namedWindow('KP Localization Image', cv.WINDOW_AUTOSIZE)
     cv.imshow('KP Localization Image', key_img)
 
     #Step 3:
+    ori_image, ori_keys = orientation_assignment(blocks_gray, new_extrema)
+    cv.namedWindow('Oriented Image', cv.WINDOW_AUTOSIZE)
+    cv.imshow('Oriented Image', ori_image)
 
     #Step 4:
+    mag, ori = find_orientation_magnitude(blocks_gray)
+    descriptors = kp_descriptors(ori_keys, mag, ori)
+
+    print(f"Number of created descriptors: {len(descriptors)}")
 
 
     cv.waitKey(0)
     cv.destroyAllWindows()
-
 
 
 if __name__ == "__main__":
